@@ -1,17 +1,19 @@
-### SQL
 import sqlite3
+import math
+
+### SQL
 
 connection = sqlite3.connect('pricingCalculator.db')
 cursor = connection.cursor()
 
-def executescript(fileName:str, connection:sqlite3.Connection,  cursor:sqlite3.Cursor):
+def executescript(fileName:str, connection:sqlite3.Connection=connection,  cursor:sqlite3.Cursor=cursor):
     with open(fileName, 'r') as sqlFile:
         sqlScript = sqlFile.read()
     
     cursor.executescript(sqlScript)
     connection.commit()
 
-def execute(fileName:str, connection:sqlite3.Connection,  cursor:sqlite3.Cursor):
+def execute(fileName:str, connection:sqlite3.Connection=connection,  cursor:sqlite3.Cursor=cursor):
     with open(fileName, 'r') as sqlFile:
         sqlScript = sqlFile.read()
     
@@ -22,48 +24,10 @@ def execute(fileName:str, connection:sqlite3.Connection,  cursor:sqlite3.Cursor)
     
     return result
 
-### Ingredients
+### DB Setup
 
-#oz
-weightIngredients = {
-    "sugar": {
-        "amount":400,
-        "price":19.97
-    }
-}
-
-#fl oz
-volumeIngredients = {
-    "corn syrup": {
-        "amount":128,
-        "price":19.99
-    },
-    "cinnamon oil": {
-        "amount":0.125,
-        "price":1.50
-    },
-    "food coloring": {
-        "amount":0,
-        "price":0
-    }
-}
-
-### Packaging
-
-packaging = { ###################################TODO: Include more for packaging (labels)
-    "1oz": {
-        "product":"Uline S-22824",
-        "size":"2oz",
-        "amount":10000,
-        "price":92.00
-    },
-    "8oz": {
-        "product":"Uline S-22827",
-        "size":"6oz",
-        "amount":5000,
-        "price":85.00
-    }
-}
+executescript("create_tables.sql")
+executescript("populate_values.sql")
 
 ### Labor
 
@@ -78,83 +42,97 @@ surchargeOffset = 0.10
 
 markupPercent = 0.50
 
-### Products
-
-products = {
-    "Cinnamon Skull": {
-        "batch":18,
-        "working hours":1,
-        "weight": {
-            "sugar":15
-        },
-        "volume": {
-            "corn syrup":6,
-            "cinnamon oil":0.25
-        },
-        "packaging":"1oz"
-    },
-    "Hard Tack": {
-        "batch":2.25,
-        "working hours":1,
-        "weight": {
-            "sugar":15
-        },
-        "volume": {
-            "corn syrup":6,
-            "cinnamon oil":0.25
-        },
-        "packaging":"8oz"
-    }
-}
-
 ### Helpers
 
 def formatMoney(money):
-    return f"{money:>5.2f}"
+    
+    return f"{money:>6.2f}"
+
+def formatMoneyForBusiness(money):
+    # Business rules
+    # Round to nearest 50 cents
+    money = round(.5 * math.ceil(money/.5), 2)
+    
+    return formatMoney(money)
+
+# perCost -> float
+def perCost(amount, price):
+    # amount bought # if 0 => return 0
+    # price bought at
+    
+    if amount == 0:
+        return 0
+    
+    return price / amount
 
 ### Calculate Price
 
-for item in products:
-    
-    currentProduct = products.get(item)
-    pricePerBatch = 0.0
-    
-    measures = [["weight", weightIngredients], ["volume", volumeIngredients]]
-    
-    #per batch
-    for measure in measures:
+# for each product
+products = cursor.execute("SELECT Products.productName, Products.id, Products.batchSize, Products.workingHours FROM Products").fetchall()
+for product in products:
         
-        currentMeasure = currentProduct.get(measure[0])
+    pricePerBatch = 0
+    pricePerProduct = 0
+    
+    (productName, productId, batchSize, workingHours) = product
         
-        for property in currentMeasure:
-            usingAmount = currentMeasure.get(property)
-            totalAmount = measure[1].get(property).get("amount")
-            price = measure[1].get(property).get("price")
-            
-            pricePerBatch += (price/totalAmount) * usingAmount
+    # batch cost
+    sql = f"""
+    SELECT ProductsIngredients.amount, Ingredients.amount, Ingredients.price
+    FROM ProductsIngredients, Ingredients, Products
+    WHERE ProductsIngredients.productId = Products.id
+    AND ProductsIngredients.ingredientId = Ingredients.id
+    AND Products.id = {productId}
+    """
+    ingredients = cursor.execute(sql).fetchall()
+    # for each ingredient needed for the product
+    for ingredient in ingredients:
+        (amountUsed, amountBought, price) = ingredient
+        # get amount used
+        # perCost(amount, price) * amount used
+        # add to pricePerBatch
+        pricePerBatch += perCost(amountBought, price) * amountUsed
+        
+    # pricePerProduct = pricePerBatch / batch size
+    pricePerProduct = pricePerBatch / batchSize
     
-    #per product
-    pack = currentProduct.get("packaging")
-    amount = packaging.get(pack).get("amount")
-    price = packaging.get(pack).get("price")
+    # packaging cost
+    sql2 = f"""
+    SELECT PackagingItems.amount, PackagingItems.price
+    FROM PackagingItems, PackagingSizes, PackagingSizesItems, Products
+    WHERE PackagingSizesItems.itemId = PackagingItems.id
+    AND PackagingSizesItems.sizeId = PackagingSizes.id
+    AND PackagingSizes.id = Products.packagingSizeId
+    AND Products.id = {productId};
+    """
+    packagingItems = cursor.execute(sql2).fetchall()
+    # for each packaging item needed for the product's packaging size
+    for packagingItem in packagingItems:
+        (amountBought, price) = packagingItem
+        # get amount used (always 1)
+        # perCost(amount, price) * amount used
+        # add to pricePerProduct
+        pricePerProduct += perCost(amountBought, price)
+
+    # Other
     
-    pricePerProduct = (price/amount)
-    
-    pricePerProduct += pricePerBatch/currentProduct.get("batch")
-    
-    laborPerProduct = (desiredWage * currentProduct.get("working hours"))/currentProduct.get("batch")
+    laborPerProduct = (desiredWage * workingHours) / batchSize
     
     basePerProduct = pricePerProduct + laborPerProduct
     
     totalPerProduct = basePerProduct + (basePerProduct * markupPercent)
     
-    cardPrice = totalPerProduct + (pricePerProduct * surchargePercent) + surchargeOffset
-    
-    print("----------------------")
-    print(item)
-    print(f"Per Product:  ${formatMoney(pricePerProduct)}")
-    print(f"Base (Labor): ${formatMoney(basePerProduct)}")
-    print(f"Markup Total: ${formatMoney(totalPerProduct)}")
-    print(f"Card Price:   ${formatMoney(cardPrice)}")
+    cardPrice = totalPerProduct + (totalPerProduct * surchargePercent) + surchargeOffset
 
+    print("----------------------")
+    print(productName)
+    print(f"Per Batch:          ${formatMoney(pricePerBatch)}")
+    print(f"Per Product:        ${formatMoney(pricePerProduct)}")
+    print(f"Labor Per Product:  ${formatMoney(laborPerProduct)}")
+    print(f"Product + Labor:    ${formatMoneyForBusiness(basePerProduct)} *")
+    print(f"Markup Total:       ${formatMoneyForBusiness(totalPerProduct)} *")
+    print(f"Card Price:         ${formatMoneyForBusiness(cardPrice)} *")
+
+print("----------------------")
+print("* Formated for business rules")
 connection.close()

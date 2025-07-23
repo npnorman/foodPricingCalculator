@@ -4,7 +4,7 @@ CREATE TABLE Ingredients (
     ingredientName varchar(20),
     amount real,
     price real,
-    measurement varchar(20)
+    measurementId integer
 );
 
 DROP TABLE IF EXISTS Measurements;
@@ -40,11 +40,12 @@ CREATE TABLE Products (
     productName varchar(20),
     batchSize real,
     workingHours real,
-    packagingSize varchar(20)
+    packagingSizeId integer
 );
 
 DROP TABLE IF EXISTS ProductsIngredients;
 CREATE TABLE ProductsIngredients (
     productId integer,
-    ingredientId integer
+    ingredientId integer,
+    amount real
 );
