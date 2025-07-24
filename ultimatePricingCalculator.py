@@ -1,5 +1,6 @@
 import sqlite3
 import math
+from tabulate import tabulate
 
 ### SQL
 
@@ -65,6 +66,13 @@ def perCost(amount, price):
     
     return price / amount
 
+# format for table
+def formatTable(description, records):
+    fields = [desc[0] for desc in description]
+    table = tabulate([fields] + records)
+
+    return table
+
 ### Calculate Price
 
 # for each product
@@ -73,6 +81,8 @@ for product in products:
         
     pricePerBatch = 0
     pricePerProduct = 0
+    perPackaging = 0
+    perIngredient = 0
     
     (productName, productId, batchSize, workingHours) = product
         
@@ -94,7 +104,8 @@ for product in products:
         pricePerBatch += perCost(amountBought, price) * amountUsed
         
     # pricePerProduct = pricePerBatch / batch size
-    pricePerProduct = pricePerBatch / batchSize
+    perIngredient = pricePerBatch / batchSize
+    pricePerProduct += perIngredient
     
     # packaging cost
     sql2 = f"""
@@ -112,27 +123,37 @@ for product in products:
         # get amount used (always 1)
         # perCost(amount, price) * amount used
         # add to pricePerProduct
-        pricePerProduct += perCost(amountBought, price)
+        perPackaging += perCost(amountBought, price)
+    pricePerProduct += perPackaging
 
     # Other
     
-    laborPerProduct = (desiredWage * workingHours) / batchSize
+    # laborPerProduct = (desiredWage * workingHours) / batchSize
     
-    basePerProduct = pricePerProduct + laborPerProduct
+    # basePerProduct = pricePerProduct + laborPerProduct
     
-    totalPerProduct = basePerProduct + (basePerProduct * markupPercent)
+    # totalPerProduct = basePerProduct + (basePerProduct * markupPercent)
     
-    cardPrice = totalPerProduct + (totalPerProduct * surchargePercent) + surchargeOffset
+    # cardPrice = totalPerProduct + (totalPerProduct * surchargePercent) + surchargeOffset
 
     print("----------------------")
     print(productName)
     print(f"Per Batch:          ${formatMoney(pricePerBatch)}")
+    print(f"Per Ingredients:    ${formatMoney(perIngredient)}")
+    print(f"Per Packaging:      ${formatMoney(perPackaging)}")
     print(f"Per Product:        ${formatMoney(pricePerProduct)}")
-    print(f"Labor Per Product:  ${formatMoney(laborPerProduct)}")
-    print(f"Product + Labor:    ${formatMoneyForBusiness(basePerProduct)} *")
-    print(f"Markup Total:       ${formatMoneyForBusiness(totalPerProduct)} *")
-    print(f"Card Price:         ${formatMoneyForBusiness(cardPrice)} *")
+    # print(f"Labor Per Product:  ${formatMoney(laborPerProduct)}")
+    # print(f"Product + Labor:    ${formatMoney(basePerProduct)} *")
+    # print(f"Markup Total:       ${formatMoney(totalPerProduct)} *")
+    # print(f"Card Price:         ${formatMoney(cardPrice)} *")
 
 print("----------------------")
-print("* Formated for business rules")
+# print("* Formated for business rules\n")
+
+executescript("create_view.sql")
+productInfo = cursor.execute("SELECT * FROM ProductInformation;").fetchall()
+fields = cursor.description
+table = formatTable(fields, productInfo)
+print(table)
+
 connection.close()
