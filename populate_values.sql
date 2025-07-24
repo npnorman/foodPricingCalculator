@@ -30,3 +30,5 @@ INSERT INTO PackagingSizesItems (sizeid, itemid) VALUES (1,4);
 INSERT INTO PackagingSizesItems (sizeid, itemid) VALUES (2,2);
 INSERT INTO PackagingSizesItems (sizeid, itemid) VALUES (2,3);
 INSERT INTO PackagingSizesItems (sizeid, itemid) VALUES (2,4);
+
+INSERT INTO AdditionalCosts (desiredWage, surchargePercent, surchargeFlatFee, markupPercent) VALUES (15.0, 0.026, 0.1, 0.5);

@@ -49,3 +49,12 @@ CREATE TABLE ProductsIngredients (
     ingredientId integer,
     amount real
 );
+
+DROP TABLE IF EXISTS AdditionalCosts;
+CREATE TABLE AdditionalCosts (
+    id integer PRIMARY KEY AUTOINCREMENT,
+    desiredWage real,
+    surchargePercent real,
+    surchargeFlatFee real,
+    markupPercent
+);

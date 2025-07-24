@@ -20,7 +20,7 @@ CREATE VIEW ProductPackagingInfo AS
 SELECT DISTINCT
 Products.id as 'id',
 Products.productName AS 'Product',
-ROUND(SUM(PackagingItems.price / PackagingItems.amount), 2) AS 'Price Per Product Packaging'
+ROUND(SUM(PackagingItems.price / PackagingItems.amount), 2) AS 'Packaging Per Product'
 FROM
 Products,
 PackagingItems,
@@ -36,12 +36,21 @@ SELECT DISTINCT
 Products.productName AS 'Product',
 ProductBatchInfo.'Price Per Batch',
 ProductBatchInfo.'Price Per Ingredients',
-ProductPackagingInfo.'Price Per Product Packaging',
-ProductBatchInfo.'Price Per Ingredients' + ProductPackagingInfo.'Price Per Product Packaging' AS 'Price Per Product'
+ProductPackagingInfo.'Packaging Per Product',
+ProductBatchInfo.'Price Per Ingredients' + ProductPackagingInfo.'Packaging Per Product' AS 'Price Per Product',
+ROUND(AdditionalCosts.desiredWage / Products.batchSize, 2) AS 'Labor Per Product',
+ROUND(AdditionalCosts.markupPercent * ((AdditionalCosts.desiredWage / Products.batchSize) + ProductBatchInfo.'Price Per Ingredients' + ProductPackagingInfo.'Packaging Per Product'), 2) AS 'Markup (Profit)',
+ROUND(AdditionalCosts.markupPercent * ((AdditionalCosts.desiredWage / Products.batchSize) + ProductBatchInfo.'Price Per Ingredients' + ProductPackagingInfo.'Packaging Per Product') * AdditionalCosts.surchargePercent + AdditionalCosts.surchargeFlatFee, 2) AS 'Square Surcharge',
+-- All together
+ROUND(AdditionalCosts.desiredWage / Products.batchSize, 2)
++ ROUND(AdditionalCosts.markupPercent * ((AdditionalCosts.desiredWage / Products.batchSize) + ProductBatchInfo.'Price Per Ingredients' + ProductPackagingInfo.'Packaging Per Product'), 2)
++ ROUND(AdditionalCosts.markupPercent * ((AdditionalCosts.desiredWage / Products.batchSize) + ProductBatchInfo.'Price Per Ingredients' + ProductPackagingInfo.'Packaging Per Product') * AdditionalCosts.surchargePercent + AdditionalCosts.surchargeFlatFee, 2)
++ (ProductBatchInfo.'Price Per Ingredients' + ProductPackagingInfo.'Packaging Per Product') AS 'Total Price'
 FROM
 Products,
 ProductBatchInfo,
-ProductPackagingInfo
+ProductPackagingInfo,
+AdditionalCosts
 WHERE Products.id = ProductBatchInfo.id
 AND Products.id = ProductPackagingInfo.id
 GROUP BY Products.id;
